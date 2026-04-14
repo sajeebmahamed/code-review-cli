@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "_comment": "Fetches up-to-date docs for TypeScript, Node.js, Commander.js, Zod, Vitest."
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"],
+      "_comment": "Browser automation for testing CLI output rendering."
+    }
+  }
+}

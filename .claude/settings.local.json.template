@@ -1,0 +1,7 @@
+{
+  "_comment": "Copy this file to settings.local.json — it is gitignored. Add your personal overrides here.",
+  "model": "claude-sonnet-4-6",
+  "env": {
+    "ANTHROPIC_API_KEY": "your-api-key-here"
+  }
+}
