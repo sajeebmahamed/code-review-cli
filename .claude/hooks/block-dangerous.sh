@@ -1,10 +1,19 @@
 #!/bin/bash
 # .claude/hooks/block-dangerous.sh
 # PreToolUse hook — blocks destructive commands before they run.
+# Receives JSON on stdin: {"tool_name": "Bash", "tool_input": {"command": "..."}, ...}
 # Exit code 2 = blocked (even in dangerouslySkipPermissions mode).
 # Exit code 0 = allowed.
 
-COMMAND="${TOOL_INPUT}"
+INPUT=$(cat)
+COMMAND=$(echo "$INPUT" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    print(d.get('tool_input', {}).get('command', ''))
+except Exception:
+    print('')
+" 2>/dev/null || echo "")
 
 # Block force pushes
 if echo "$COMMAND" | grep -qiE 'git push.*(--force|-f)\b'; then

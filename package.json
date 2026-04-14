@@ -11,8 +11,24 @@
     "dev": "ts-node src/index.ts",
     "lint": "eslint src/**",
     "test": "vitest",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "review": "node dist/index.js"
   },
   "keywords": ["cli", "code-review", "claude", "ai"],
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^12.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "@vitest/coverage-v8": "^1.6.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
 }

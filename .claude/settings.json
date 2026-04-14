@@ -27,37 +27,49 @@
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "type": "command",
-        "command": "bash .claude/hooks/block-dangerous.sh"
-      },
-      {
-        "matcher": "Bash",
-        "type": "command",
-        "command": "bash .claude/hooks/credential-check.sh"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/block-dangerous.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/credential-check.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit|MultiEdit",
-        "type": "command",
-        "command": "FILE=$TOOL_RESULT_FILE; if [[ \"$FILE\" == *.ts || \"$FILE\" == *.tsx || \"$FILE\" == *.json ]]; then npx prettier --write \"$FILE\" 2>/dev/null; fi"
-      },
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "type": "command",
-        "command": "FILE=$TOOL_RESULT_FILE; if [[ \"$FILE\" == *.ts || \"$FILE\" == *.tsx ]]; then npx eslint --fix \"$FILE\" 2>/dev/null; fi"
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/post-format.sh"
+          }
+        ]
       }
     ],
     "Stop": [
       {
-        "type": "command",
-        "command": "npm test -- --run 2>/dev/null && echo '✅ All tests pass' || echo '⚠️  Some tests failed — check before committing'"
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npm test -- --run 2>/dev/null && echo 'All tests pass' || echo 'Some tests failed — check before committing'"
+          }
+        ]
       }
     ],
     "SessionStart": [
       {
-        "type": "command",
-        "command": "echo '🚀 Claude Code session started for: Code Review CLI' && git status --short"
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Claude Code session started for: Code Review CLI' && git status --short"
+          }
+        ]
       }
     ]
   }
