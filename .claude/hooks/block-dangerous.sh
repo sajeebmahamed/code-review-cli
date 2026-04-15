@@ -17,25 +17,25 @@ except Exception:
 
 # Block force pushes
 if echo "$COMMAND" | grep -qiE 'git push.*(--force|-f)\b'; then
-  echo "BLOCKED: Force push is not allowed. Open a PR instead."
+  echo "BLOCKED: Force push is not allowed. Open a PR instead." >&2
   exit 2
 fi
 
 # Block direct commits to main/master
 if echo "$COMMAND" | grep -qiE "git commit.*main|git commit.*master"; then
-  echo "BLOCKED: Cannot commit directly to main/master. Create a feature branch."
+  echo "BLOCKED: Cannot commit directly to main/master. Create a feature branch." >&2
   exit 2
 fi
 
 # Block recursive deletes
 if echo "$COMMAND" | grep -qiE 'rm\s+-rf|rm\s+-fr'; then
-  echo "BLOCKED: rm -rf is not allowed. Use rm with specific file paths."
+  echo "BLOCKED: rm -rf is not allowed. Use rm with specific file paths." >&2
   exit 2
 fi
 
 # Block bypassing git hooks
 if echo "$COMMAND" | grep -qiE 'git commit --no-verify|git commit -n\b'; then
-  echo "BLOCKED: --no-verify bypasses pre-commit hooks. Not allowed."
+  echo "BLOCKED: --no-verify bypasses pre-commit hooks. Not allowed." >&2
   exit 2
 fi
 
