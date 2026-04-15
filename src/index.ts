@@ -4,15 +4,23 @@
 
 import { Command } from 'commander'
 import { z } from 'zod'
-import { getStagedDiff, getHeadDiff, getDiffFromBranch } from './diff'
+import {
+  getStagedDiff,
+  getHeadDiff,
+  getDiffFromBranch,
+  getFilteredDiff,
+} from './diff'
 import { runReview } from './review'
 import { formatMarkdown, formatJSON } from './report'
 import { type CLIOptions } from './types'
+
+const DIFF_SIZE_LIMIT = 100_000
 
 const OptionsSchema = z.object({
   staged: z.boolean().default(true),
   head: z.boolean().default(false),
   branch: z.string().optional(),
+  files: z.array(z.string()).optional(),
   output: z.enum(['markdown', 'json']).default('markdown'),
   verbose: z.boolean().default(false),
   model: z.string().optional(),
@@ -25,16 +33,24 @@ const startSpinner = (): NodeJS.Timeout => {
   process.stderr.write('Reviewing... 0s')
   return setInterval(() => {
     seconds++
-    process.stderr.clearLine(0)
-    process.stderr.cursorTo(0)
+    if (process.stderr.isTTY) {
+      process.stderr.clearLine(0)
+      process.stderr.cursorTo(0)
+    } else {
+      process.stderr.write('\n')
+    }
     process.stderr.write(`Reviewing... ${seconds}s`)
   }, 1000)
 }
 
 const clearSpinner = (timer: NodeJS.Timeout): void => {
   clearInterval(timer)
-  process.stderr.clearLine(0)
-  process.stderr.cursorTo(0)
+  if (process.stderr.isTTY) {
+    process.stderr.clearLine(0)
+    process.stderr.cursorTo(0)
+  } else {
+    process.stderr.write('\n')
+  }
 }
 
 const program = new Command()
@@ -50,6 +66,7 @@ program
   .option('--staged', 'review staged changes (default)', false)
   .option('--head', 'review changes since last commit', false)
   .option('--branch <name>', 'review diff vs this branch (default: main)')
+  .option('--files <paths...>', 'review only these files (space-separated)')
   .option(
     '--output <format>',
     'output format: markdown or json (default: markdown)',
@@ -74,15 +91,34 @@ program
       model: opts.model,
     }
 
-    // Get diff
-    const diffResult = opts.head
-      ? getHeadDiff()
+    // Determine diff mode
+    const mode: 'staged' | 'head' | 'branch' = opts.head
+      ? 'head'
       : opts.branch
-        ? getDiffFromBranch(opts.branch)
-        : getStagedDiff()
+        ? 'branch'
+        : 'staged'
+
+    // Get diff — scoped to files if --files is provided
+    const diffResult = opts.files
+      ? getFilteredDiff(opts.files, mode, opts.branch)
+      : mode === 'head'
+        ? getHeadDiff()
+        : mode === 'branch'
+          ? getDiffFromBranch(opts.branch)
+          : getStagedDiff()
 
     if (!diffResult.ok) {
       console.error(`Error: ${diffResult.error}`)
+      process.exit(1)
+    }
+
+    // Guard against diffs too large for a quality review
+    if (diffResult.value.raw.length > DIFF_SIZE_LIMIT) {
+      const lines = diffResult.value.raw.split('\n').length
+      console.error(
+        `Error: Diff is too large (${lines} lines, ${diffResult.value.raw.length} chars). ` +
+          `Narrow the scope with --files or review in smaller batches.`
+      )
       process.exit(1)
     }
 
@@ -99,7 +135,7 @@ program
       spinner = startSpinner()
     }
 
-    const reviewResult = await runReview(diffResult.value, cliOptions)
+    const reviewResult = runReview(diffResult.value, cliOptions)
 
     if (spinner) {
       clearSpinner(spinner)

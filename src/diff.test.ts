@@ -1,13 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { getStagedDiff, parseDiffStats } from './diff'
+import {
+  getStagedDiff,
+  getHeadDiff,
+  getDiffFromBranch,
+  getFilteredDiff,
+  parseDiffStats,
+} from './diff'
 
 vi.mock('child_process', () => ({
-  execSync: vi.fn(),
+  spawnSync: vi.fn(),
 }))
 
-import { execSync } from 'child_process'
+import { spawnSync } from 'child_process'
 
-const mockExecSync = vi.mocked(execSync)
+const mockSpawnSync = vi.mocked(spawnSync)
 
 const SAMPLE_DIFF = `diff --git a/src/foo.ts b/src/foo.ts
 index 1234567..abcdefg 100644
@@ -19,6 +25,55 @@ index 1234567..abcdefg 100644
 +const z = 3
 -const old = 0
 `
+
+// Helper: simulate a successful git diff + getCurrentBranch call pair
+const mockDiffSuccess = (stdout: string, branch = 'development'): void => {
+  mockSpawnSync
+    .mockReturnValueOnce({
+      status: 0,
+      stdout,
+      stderr: '',
+      error: undefined,
+      pid: 1,
+      output: [],
+      signal: null,
+    } as never) // git diff
+    .mockReturnValueOnce({
+      status: 0,
+      stdout: branch,
+      stderr: '',
+      error: undefined,
+      pid: 1,
+      output: [],
+      signal: null,
+    } as never) // git rev-parse --abbrev-ref HEAD
+}
+
+// Helper: simulate a git command not found
+const mockGitNotFound = (): void => {
+  mockSpawnSync.mockReturnValueOnce({
+    status: null,
+    stdout: '',
+    stderr: '',
+    error: new Error('spawnSync git ENOENT'),
+    pid: 0,
+    output: [],
+    signal: null,
+  } as never)
+}
+
+// Helper: simulate git non-zero exit with stderr message
+const mockGitError = (stderr: string): void => {
+  mockSpawnSync.mockReturnValueOnce({
+    status: 128,
+    stdout: '',
+    stderr,
+    error: undefined,
+    pid: 1,
+    output: [],
+    signal: null,
+  } as never)
+}
 
 describe('parseDiffStats', () => {
   it('should correctly count additions, deletions, and files changed', () => {
@@ -42,9 +97,7 @@ describe('getStagedDiff', () => {
   })
 
   it('should return DiffInput when staged diff is non-empty', () => {
-    // execSync call order: git diff --staged first, then git rev-parse inside getCurrentBranch
-    mockExecSync.mockReturnValueOnce(SAMPLE_DIFF as never) // git diff --staged
-    mockExecSync.mockReturnValueOnce('development' as never) // git rev-parse --abbrev-ref HEAD
+    mockDiffSuccess(SAMPLE_DIFF)
 
     const result = getStagedDiff()
 
@@ -59,9 +112,7 @@ describe('getStagedDiff', () => {
   })
 
   it('should return Err when staged diff is empty', () => {
-    // empty string is returned for git diff --staged; getCurrentBranch still runs inside buildDiffInput
-    mockExecSync.mockReturnValueOnce('' as never) // git diff --staged
-    mockExecSync.mockReturnValueOnce('development' as never) // git rev-parse --abbrev-ref HEAD
+    mockDiffSuccess('')
 
     const result = getStagedDiff()
 
@@ -71,11 +122,8 @@ describe('getStagedDiff', () => {
     }
   })
 
-  it('should return Err when git command throws', () => {
-    // git diff --staged throws — catch block returns early, getCurrentBranch never runs
-    mockExecSync.mockImplementationOnce(() => {
-      throw new Error('git: command not found')
-    })
+  it('should return Err when git is not installed', () => {
+    mockGitNotFound()
 
     const result = getStagedDiff()
 
@@ -87,17 +135,173 @@ describe('getStagedDiff', () => {
     }
   })
 
-  it('should return Err with repo message when not in a git repo', () => {
-    // git diff --staged throws — catch block returns early, getCurrentBranch never runs
-    mockExecSync.mockImplementationOnce(() => {
-      throw new Error('fatal: not a git repository')
-    })
+  it('should return Err when not in a git repo', () => {
+    mockGitError('fatal: not a git repository')
 
     const result = getStagedDiff()
 
     expect(result.ok).toBe(false)
     if (!result.ok) {
       expect(result.error).toContain('Not a git repository')
+    }
+  })
+})
+
+describe('getHeadDiff', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+  })
+
+  it('should return DiffInput when HEAD diff is non-empty', () => {
+    mockDiffSuccess(SAMPLE_DIFF)
+
+    const result = getHeadDiff()
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value.raw).toBe(SAMPLE_DIFF)
+      expect(result.value.filesChanged).toBe(1)
+    }
+  })
+
+  it('should return Err when HEAD diff is empty', () => {
+    mockDiffSuccess('')
+
+    const result = getHeadDiff()
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toContain('No changes found against HEAD')
+    }
+  })
+
+  it('should return Err when git command fails', () => {
+    mockGitNotFound()
+
+    const result = getHeadDiff()
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toContain(
+        'git is not installed or not available in PATH'
+      )
+    }
+  })
+})
+
+describe('getDiffFromBranch', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+  })
+
+  it('should return DiffInput when branch diff is non-empty', () => {
+    mockDiffSuccess(SAMPLE_DIFF)
+
+    const result = getDiffFromBranch('main')
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value.raw).toBe(SAMPLE_DIFF)
+      expect(result.value.filesChanged).toBe(1)
+    }
+  })
+
+  it('should return Err when branch diff is empty', () => {
+    mockDiffSuccess('')
+
+    const result = getDiffFromBranch('main')
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toContain(
+        'No changes found between HEAD and origin/main'
+      )
+    }
+  })
+
+  it('should default to main when no branch is provided', () => {
+    mockDiffSuccess(SAMPLE_DIFF)
+
+    const result = getDiffFromBranch()
+
+    expect(result.ok).toBe(true)
+  })
+
+  it('should return Err when git command fails', () => {
+    mockGitError('fatal: not a git repository')
+
+    const result = getDiffFromBranch('main')
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toContain('Not a git repository')
+    }
+  })
+})
+
+describe('getFilteredDiff', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+  })
+
+  it('should return DiffInput scoped to specified files in staged mode', () => {
+    mockDiffSuccess(SAMPLE_DIFF)
+
+    const result = getFilteredDiff(['src/foo.ts', 'src/bar.ts'], 'staged')
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value.raw).toBe(SAMPLE_DIFF)
+      expect(result.value.filesChanged).toBe(1)
+    }
+  })
+
+  it('should return DiffInput scoped to specified files in head mode', () => {
+    mockDiffSuccess(SAMPLE_DIFF)
+
+    const result = getFilteredDiff(['src/foo.ts'], 'head')
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value.raw).toBe(SAMPLE_DIFF)
+    }
+  })
+
+  it('should return DiffInput scoped to specified files in branch mode', () => {
+    mockDiffSuccess(SAMPLE_DIFF)
+
+    const result = getFilteredDiff(['src/foo.ts'], 'branch', 'main')
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value.raw).toBe(SAMPLE_DIFF)
+    }
+  })
+
+  it('should return Err when no changes found in specified files', () => {
+    mockDiffSuccess('')
+
+    const result = getFilteredDiff(['src/foo.ts'], 'staged')
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toContain(
+        'No changes found in the specified file(s)'
+      )
+      expect(result.error).toContain('src/foo.ts')
+    }
+  })
+
+  it('should return Err when git command fails', () => {
+    mockGitNotFound()
+
+    const result = getFilteredDiff(['src/foo.ts'], 'staged')
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toContain(
+        'git is not installed or not available in PATH'
+      )
     }
   })
 })
