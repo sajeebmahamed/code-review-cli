@@ -13,6 +13,7 @@ import {
 import { runReview } from './review'
 import { formatMarkdown, formatJSON } from './report'
 import { type CLIOptions } from './types'
+import { startSpinner } from './spinner'
 
 const DIFF_SIZE_LIMIT = 100_000
 
@@ -27,31 +28,6 @@ const OptionsSchema = z.object({
 })
 
 type RawOptions = z.infer<typeof OptionsSchema>
-
-const startSpinner = (): NodeJS.Timeout => {
-  let seconds = 0
-  process.stderr.write('Reviewing... 0s')
-  return setInterval(() => {
-    seconds++
-    if (process.stderr.isTTY) {
-      process.stderr.clearLine(0)
-      process.stderr.cursorTo(0)
-    } else {
-      process.stderr.write('\n')
-    }
-    process.stderr.write(`Reviewing... ${seconds}s`)
-  }, 1000)
-}
-
-const clearSpinner = (timer: NodeJS.Timeout): void => {
-  clearInterval(timer)
-  if (process.stderr.isTTY) {
-    process.stderr.clearLine(0)
-    process.stderr.cursorTo(0)
-  } else {
-    process.stderr.write('\n')
-  }
-}
 
 const program = new Command()
 
@@ -74,7 +50,7 @@ program
   )
   .option('--verbose', 'show diff stats and extra detail', false)
   .option('--model <name>', 'override Claude model name')
-  .action(async (rawOpts: Record<string, unknown>) => {
+  .action((rawOpts: Record<string, unknown>) => {
     // Validate options
     const parsed = OptionsSchema.safeParse(rawOpts)
     if (!parsed.success) {
@@ -130,15 +106,15 @@ program
     }
 
     // Spinner (only when not json output)
-    let spinner: NodeJS.Timeout | null = null
+    let stopSpinner: (() => void) | null = null
     if (!isJson) {
-      spinner = startSpinner()
+      stopSpinner = startSpinner('Reviewing...')
     }
 
     const reviewResult = runReview(diffResult.value, cliOptions)
 
-    if (spinner) {
-      clearSpinner(spinner)
+    if (stopSpinner) {
+      stopSpinner()
     }
 
     if (!reviewResult.ok) {
