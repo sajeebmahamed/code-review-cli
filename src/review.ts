@@ -1,6 +1,7 @@
 // Core review orchestration
 
 import { spawnSync } from 'child_process'
+import { z } from 'zod'
 import {
   type Result,
   type DiffInput,
@@ -9,6 +10,26 @@ import {
   ok,
   err,
 } from './types'
+
+const ReviewIssueSchema = z.object({
+  severity: z.enum(['critical', 'important', 'suggestion']),
+  file: z.string(),
+  line: z.number().optional(),
+  message: z.string(),
+  fix: z.string().optional(),
+})
+
+const ReviewReportSchema = z.object({
+  summary: z.string(),
+  issues: z.array(ReviewIssueSchema),
+  verdict: z.enum(['approve', 'request-changes']),
+  generatedAt: z.string(),
+  diffStats: z.object({
+    filesChanged: z.number(),
+    additions: z.number(),
+    deletions: z.number(),
+  }),
+})
 
 const buildPrompt = (diff: DiffInput): string =>
   `
@@ -60,35 +81,27 @@ ${diff.raw}
 const parseReport = (raw: string): Result<ReviewReport> => {
   try {
     const parsed: unknown = JSON.parse(raw)
-    // Basic structural validation before casting
-    if (
-      typeof parsed !== 'object' ||
-      parsed === null ||
-      !('summary' in parsed) ||
-      !('issues' in parsed) ||
-      !('verdict' in parsed) ||
-      !('generatedAt' in parsed) ||
-      !('diffStats' in parsed)
-    ) {
+    const validated = ReviewReportSchema.safeParse(parsed)
+    if (!validated.success) {
       return err('Claude returned an unexpected response format')
     }
-    return ok(parsed as ReviewReport)
+    return ok(validated.data)
   } catch {
     return err('Claude returned an unexpected response format')
   }
 }
 
-export const runReview = async (
+export const runReview = (
   diff: DiffInput,
   options: CLIOptions
-): Promise<Result<ReviewReport>> => {
+): Result<ReviewReport> => {
   const prompt = buildPrompt(diff)
   const model = options.model ?? 'claude-sonnet-4-6'
 
   const result = spawnSync(
     'claude',
     ['-p', '--output-format', 'json', '--model', model, prompt],
-    { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 }
+    { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, timeout: 60000 }
   )
 
   if (result.error) {
@@ -114,7 +127,7 @@ export const runReview = async (
   const stdout = result.stdout?.trim() ?? ''
 
   if (options.verbose) {
-    console.log('[review] raw claude output:', stdout)
+    console.error('[review] raw claude output:', stdout)
   }
 
   // claude --output-format json wraps output in a result envelope

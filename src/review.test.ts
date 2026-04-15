@@ -35,23 +35,36 @@ const VALID_REPORT: ReviewReport = {
 const makeEnvelope = (report: ReviewReport): string =>
   JSON.stringify({ result: JSON.stringify(report) })
 
+const makeSpawnResult = (
+  overrides: Partial<{
+    status: number | null
+    stdout: string
+    stderr: string
+    error: Error | undefined
+  }>
+): ReturnType<typeof spawnSync> =>
+  ({
+    status: 0,
+    stdout: '',
+    stderr: '',
+    error: undefined,
+    pid: 1,
+    output: [],
+    signal: null,
+    ...overrides,
+  }) as ReturnType<typeof spawnSync>
+
 describe('runReview', () => {
   beforeEach(() => {
     vi.resetAllMocks()
   })
 
-  it('should return ReviewReport when Claude responds with valid JSON envelope', async () => {
-    mockSpawnSync.mockReturnValueOnce({
-      status: 0,
-      stdout: makeEnvelope(VALID_REPORT),
-      stderr: '',
-      error: undefined,
-      pid: 1,
-      output: [],
-      signal: null,
-    })
+  it('should return ReviewReport when Claude responds with valid JSON envelope', () => {
+    mockSpawnSync.mockReturnValueOnce(
+      makeSpawnResult({ stdout: makeEnvelope(VALID_REPORT) })
+    )
 
-    const result = await runReview(DIFF, OPTIONS)
+    const result = runReview(DIFF, OPTIONS)
 
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -61,18 +74,12 @@ describe('runReview', () => {
     }
   })
 
-  it('should return ReviewReport when Claude responds with raw JSON (no envelope)', async () => {
-    mockSpawnSync.mockReturnValueOnce({
-      status: 0,
-      stdout: JSON.stringify(VALID_REPORT),
-      stderr: '',
-      error: undefined,
-      pid: 1,
-      output: [],
-      signal: null,
-    })
+  it('should return ReviewReport when Claude responds with raw JSON (no envelope)', () => {
+    mockSpawnSync.mockReturnValueOnce(
+      makeSpawnResult({ stdout: JSON.stringify(VALID_REPORT) })
+    )
 
-    const result = await runReview(DIFF, OPTIONS)
+    const result = runReview(DIFF, OPTIONS)
 
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -80,18 +87,15 @@ describe('runReview', () => {
     }
   })
 
-  it('should return Err when claude command is not found', async () => {
-    mockSpawnSync.mockReturnValueOnce({
-      status: null,
-      stdout: '',
-      stderr: '',
-      error: new Error('spawnSync claude ENOENT'),
-      pid: 0,
-      output: [],
-      signal: null,
-    })
+  it('should return Err when claude command is not found', () => {
+    mockSpawnSync.mockReturnValueOnce(
+      makeSpawnResult({
+        status: null,
+        error: new Error('spawnSync claude ENOENT'),
+      })
+    )
 
-    const result = await runReview(DIFF, OPTIONS)
+    const result = runReview(DIFF, OPTIONS)
 
     expect(result.ok).toBe(false)
     if (!result.ok) {
@@ -99,18 +103,15 @@ describe('runReview', () => {
     }
   })
 
-  it('should return Err when API key is missing', async () => {
-    mockSpawnSync.mockReturnValueOnce({
-      status: 1,
-      stdout: '',
-      stderr: 'Error: ANTHROPIC_API_KEY is not set',
-      error: undefined,
-      pid: 1,
-      output: [],
-      signal: null,
-    })
+  it('should return Err when API key is missing', () => {
+    mockSpawnSync.mockReturnValueOnce(
+      makeSpawnResult({
+        status: 1,
+        stderr: 'Error: ANTHROPIC_API_KEY is not set',
+      })
+    )
 
-    const result = await runReview(DIFF, OPTIONS)
+    const result = runReview(DIFF, OPTIONS)
 
     expect(result.ok).toBe(false)
     if (!result.ok) {
@@ -118,18 +119,12 @@ describe('runReview', () => {
     }
   })
 
-  it('should return Err when Claude returns malformed JSON', async () => {
-    mockSpawnSync.mockReturnValueOnce({
-      status: 0,
-      stdout: 'not valid json at all',
-      stderr: '',
-      error: undefined,
-      pid: 1,
-      output: [],
-      signal: null,
-    })
+  it('should return Err when Claude returns malformed JSON', () => {
+    mockSpawnSync.mockReturnValueOnce(
+      makeSpawnResult({ stdout: 'not valid json at all' })
+    )
 
-    const result = await runReview(DIFF, OPTIONS)
+    const result = runReview(DIFF, OPTIONS)
 
     expect(result.ok).toBe(false)
     if (!result.ok) {
@@ -137,18 +132,12 @@ describe('runReview', () => {
     }
   })
 
-  it('should return Err when Claude exits with non-zero code', async () => {
-    mockSpawnSync.mockReturnValueOnce({
-      status: 1,
-      stdout: '',
-      stderr: 'Internal server error',
-      error: undefined,
-      pid: 1,
-      output: [],
-      signal: null,
-    })
+  it('should return Err when Claude exits with non-zero code', () => {
+    mockSpawnSync.mockReturnValueOnce(
+      makeSpawnResult({ status: 1, stderr: 'Internal server error' })
+    )
 
-    const result = await runReview(DIFF, OPTIONS)
+    const result = runReview(DIFF, OPTIONS)
 
     expect(result.ok).toBe(false)
     if (!result.ok) {

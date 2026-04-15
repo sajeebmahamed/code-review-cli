@@ -52,8 +52,7 @@ export const formatMarkdown = (report: ReviewReport): string => {
   return lines.join('\n')
 }
 
-export const formatJSON = (report: ReviewReport): string => {
-  const output = JSON.stringify(report, null, 2)
-  JSON.parse(output) // validate parseable
-  return output
-}
+// JSON.stringify on a well-typed ReviewReport cannot produce unparseable JSON.
+// No round-trip validation needed — returning directly avoids a raw throw.
+export const formatJSON = (report: ReviewReport): string =>
+  JSON.stringify(report, null, 2)
