@@ -62,7 +62,3 @@ This is a sandbox for learning how to integrate Claude Code deeply into a develo
 - Building custom agents and skills for the Claude Code CLI
 - Automating code review as part of a CI pipeline
 - Exploring hooks, permissions, and safe AI-assisted development patterns
-
-## License
-
-MIT
