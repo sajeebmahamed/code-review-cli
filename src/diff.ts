@@ -71,7 +71,9 @@ export const getStagedDiff = (): Result<DiffInput> => {
   const result = runGitDiff(['--staged'])
   if (!result.ok) return result
   if (result.value.raw.trim() === '') {
-    return err("No staged changes found. Run 'git add' to stage files first.")
+    return err(
+      "No staged changes found. Stage your files with 'git add <file>' first."
+    )
   }
   return result
 }
