@@ -2,6 +2,7 @@
 
 // CLI entry point
 
+import { writeFileSync } from 'fs'
 import { Command } from 'commander'
 import { z } from 'zod'
 import {
@@ -25,6 +26,8 @@ const OptionsSchema = z.object({
   output: z.enum(['markdown', 'json']).default('markdown'),
   verbose: z.boolean().default(false),
   model: z.string().optional(),
+  noCache: z.boolean().default(false),
+  outputFile: z.string().optional(),
 })
 
 type RawOptions = z.infer<typeof OptionsSchema>
@@ -50,6 +53,8 @@ program
   )
   .option('--verbose', 'show diff stats and extra detail', false)
   .option('--model <name>', 'override Claude model name')
+  .option('--no-cache', 'bypass the review cache')
+  .option('--output-file <path>', 'save review to file instead of stdout')
   .action((rawOpts: Record<string, unknown>) => {
     // Validate options
     const parsed = OptionsSchema.safeParse(rawOpts)
@@ -65,6 +70,7 @@ program
       output: opts.output,
       verbose: opts.verbose,
       model: opts.model,
+      noCache: opts.noCache,
     }
 
     // Determine diff mode
@@ -126,7 +132,12 @@ program
       ? formatJSON(reviewResult.value)
       : formatMarkdown(reviewResult.value)
 
-    process.stdout.write(output + '\n')
+    if (opts.outputFile) {
+      writeFileSync(opts.outputFile, output + '\n', 'utf8')
+      if (!isJson) console.error(`Review saved to ${opts.outputFile}`)
+    } else {
+      process.stdout.write(output + '\n')
+    }
     process.exit(0)
   })
 

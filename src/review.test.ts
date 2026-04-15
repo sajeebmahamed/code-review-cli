@@ -6,6 +6,12 @@ vi.mock('child_process', () => ({
   spawnSync: vi.fn(),
 }))
 
+vi.mock('./cache', () => ({
+  diffHash: vi.fn(() => 'mockhash'),
+  readCache: vi.fn(() => ({ ok: true, value: null })),
+  writeCache: vi.fn(() => ({ ok: true, value: undefined })),
+}))
+
 import { spawnSync } from 'child_process'
 
 const mockSpawnSync = vi.mocked(spawnSync)
@@ -21,6 +27,7 @@ const DIFF: DiffInput = {
 const OPTIONS: CLIOptions = {
   output: 'markdown',
   verbose: false,
+  noCache: true,
 }
 
 const VALID_REPORT: ReviewReport = {

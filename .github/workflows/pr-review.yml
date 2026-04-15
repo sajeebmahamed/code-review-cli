@@ -1,0 +1,86 @@
+name: PR Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies and build
+        run: npm ci && npm run build
+
+      - name: Run AI review
+        id: review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          node dist/index.js review --branch origin/main --output json --no-cache > /tmp/review.json
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Post PR comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SUMMARY=$(jq -r '.summary' /tmp/review.json)
+          VERDICT=$(jq -r '.verdict' /tmp/review.json)
+          CRITICAL=$(jq -c '[.issues[] | select(.severity == "critical")]' /tmp/review.json)
+          CRITICAL_COUNT=$(echo "$CRITICAL" | jq 'length')
+          IMPORTANT=$(jq -c '[.issues[] | select(.severity == "important")]' /tmp/review.json)
+          SUGGESTIONS=$(jq -c '[.issues[] | select(.severity == "suggestion")]' /tmp/review.json)
+
+          format_issues() {
+            echo "$1" | jq -r '.[] | "- **\(.file)\(if .line then ":\(.line)" else "" end)** — \(.message)\(if .fix then "\n  > Fix: \(.fix)" else "" end)"'
+          }
+
+          BODY="## AI Code Review
+
+          $SUMMARY
+
+          **Verdict:** $VERDICT"
+
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            BODY="$BODY
+
+          ### Critical Issues
+          $(format_issues "$CRITICAL")"
+          fi
+
+          IMPORTANT_COUNT=$(echo "$IMPORTANT" | jq 'length')
+          if [ "$IMPORTANT_COUNT" -gt 0 ]; then
+            BODY="$BODY
+
+          ### Important
+          $(format_issues "$IMPORTANT")"
+          fi
+
+          SUGGESTION_COUNT=$(echo "$SUGGESTIONS" | jq 'length')
+          if [ "$SUGGESTION_COUNT" -gt 0 ]; then
+            BODY="$BODY
+
+          ### Suggestions
+          $(format_issues "$SUGGESTIONS")"
+          fi
+
+          gh pr comment "${{ github.event.pull_request.number }}" --body "$BODY"
+
+      - name: Block merge on critical issues
+        run: |
+          CRITICAL_COUNT=$(jq '[.issues[] | select(.severity == "critical")] | length' /tmp/review.json)
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "Blocking merge: $CRITICAL_COUNT critical issue(s) found."
+            exit 1
+          fi

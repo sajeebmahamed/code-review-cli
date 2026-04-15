@@ -10,6 +10,7 @@ import {
   ok,
   err,
 } from './types'
+import { diffHash, readCache, writeCache } from './cache'
 
 const ReviewIssueSchema = z.object({
   severity: z.enum(['critical', 'important', 'suggestion']),
@@ -95,6 +96,20 @@ export const runReview = (
   diff: DiffInput,
   options: CLIOptions
 ): Result<ReviewReport> => {
+  if (!options.noCache) {
+    const key = diffHash(diff.raw)
+    const cached = readCache(key)
+    if (cached.ok && cached.value !== null) {
+      if (options.verbose) {
+        console.error('[review] cache hit, skipping Claude call')
+      }
+      return ok(cached.value)
+    }
+    if (!cached.ok && options.verbose) {
+      console.error(`[review] cache read error: ${cached.error}`)
+    }
+  }
+
   const prompt = buildPrompt(diff)
   const model = options.model ?? 'claude-sonnet-4-6'
 
@@ -152,5 +167,14 @@ export const runReview = (
     // stdout is not a JSON envelope — fall through and try parsing directly
   }
 
-  return parseReport(jsonText)
+  const report = parseReport(jsonText)
+
+  if (!options.noCache && report.ok) {
+    const writeResult = writeCache(diffHash(diff.raw), report.value)
+    if (!writeResult.ok && options.verbose) {
+      console.error(`[review] cache write error: ${writeResult.error}`)
+    }
+  }
+
+  return report
 }

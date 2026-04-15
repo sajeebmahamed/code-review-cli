@@ -45,4 +45,5 @@ export interface CLIOptions {
   output: 'markdown' | 'json'
   verbose: boolean
   model?: string
+  noCache: boolean
 }
