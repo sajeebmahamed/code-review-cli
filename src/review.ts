@@ -23,7 +23,7 @@ const ReviewReportSchema = z.object({
   summary: z.string(),
   issues: z.array(ReviewIssueSchema),
   verdict: z.enum(['approve', 'request-changes']),
-  generatedAt: z.string(),
+  generatedAt: z.string().datetime(),
   diffStats: z.object({
     filesChanged: z.number(),
     additions: z.number(),
@@ -100,8 +100,13 @@ export const runReview = (
 
   const result = spawnSync(
     'claude',
-    ['-p', '--output-format', 'json', '--model', model, prompt],
-    { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, timeout: 60000 }
+    ['-p', '--output-format', 'json', '--model', model],
+    {
+      encoding: 'utf8',
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 60000,
+      input: prompt,
+    }
   )
 
   if (result.error) {
